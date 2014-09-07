@@ -126,6 +126,10 @@ static uint16_t snoozetimer = 0;
  */
 static inline void sleep(void)
 {
+  // ensure all timer2 registers are written before sleeping
+  while(ASSR & (_BV(TCN2UB) | _BV(OCR2AUB) | _BV(OCR2BUB) |
+	        _BV(TCR2AUB) | _BV(TCR2BUB) ));
+
   asm volatile("sei $ sleep" : : : "memory");
 }
 
@@ -768,8 +772,20 @@ static void set_brite(void)
  */
 SIGNAL (TIMER2_COMPA_vect) {
   struct timedate td;
-  CLKPR = _BV(CLKPCE);  //MEME
-  CLKPR = 0;
+
+  // write to unused timer2 register:  the sleep code will ensure this value
+  // gets written before going to sleep--something that requires one full
+  // quartz crystal clock cycle.  This is important because this interrupt
+  // must take at least one full quartz crystal cycle for reliable sleep.
+  OCR2B = 0;
+
+  // for reliable low-voltage operation during sleep (1.7-3.0v), clock
+  // must not be set above 2 MHz; so only increase clock speed if powered
+  // by external adapter
+  if (!(ACSR & _BV(ACO))) {
+    CLKPR = _BV(CLKPCE);  // MEME
+    CLKPR = 0;
+  }
 
   td = timedate;
 
@@ -1644,15 +1660,17 @@ static void clock_init(void)
    * correction.
    */
   // Turn on the RTC by selecting the external 32khz crystal
-  ASSR = _BV(AS2); // use crystal
+  if(! TCCR2A) {  // only configure crystal if not already configured
+    ASSR = _BV(AS2); // use crystal
 
-  TCNT2 = 0;
-  OCR2A = DRIFT_BASELINE;		/* +/- drift correction */
-  TCCR2A = _BV(WGM21);
-  TCCR2B = _BV(CS22) | _BV(CS21);
+    TCNT2 = 0;
+    OCR2A = DRIFT_BASELINE;		/* +/- drift correction */
+    TCCR2A = _BV(WGM21);
+    TCCR2B = _BV(CS22) | _BV(CS21);
 
-  // enable interrupt
-  TIMSK2 = _BV(OCIE1A);
+    // enable interrupt
+    TIMSK2 = _BV(OCIE1A);
+  }
 
   // enable all interrupts!
   sei();
@@ -1689,9 +1707,11 @@ void gotosleep(void) {
   ALARM_DDR &= ~_BV(ALARM);
   
 
-  // reduce the clock speed
+  // reduce the clock speed; division by four
+  // the original firmware divides by 256, but the resultant system clock
+  // speed is too slow for reliable asynchronous timer (timer2) operation
   CLKPR = _BV(CLKPCE);
-  CLKPR = _BV(CLKPS3);
+  CLKPR = _BV(CLKPS1);
 
   SMCR = _BV(SM1) | _BV(SM0) | _BV(SE); // power-save mode
   
