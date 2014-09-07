@@ -573,7 +573,7 @@ static void flip_display(transition_t* trans)
 }
 
 // called @ (F_CPU/256) = ~30khz (31.25 khz)
-SIGNAL (SIG_OVERFLOW0) {
+SIGNAL (TIMER0_OVF_vect) {
   // allow other interrupts to go off while we're doing display updates
   sei();
 
@@ -628,13 +628,13 @@ SIGNAL (SIG_OVERFLOW0) {
 // We use the pin change interrupts to detect when buttons are pressed
 
 // This interrupt detects switches 1 and 3
-SIGNAL(SIG_PIN_CHANGE2) {
+SIGNAL(PCINT2_vect) {
   button_change_intr(0, !(PIND & _BV(BUTTON1)));
   button_change_intr(2, !(PIND & _BV(BUTTON3)));
 }
 
 // Just button #2
-SIGNAL(SIG_PIN_CHANGE0) {
+SIGNAL(PCINT0_vect) {
   button_change_intr(1, !(PINB & _BV(BUTTON2)));
 }
 
@@ -813,7 +813,7 @@ SIGNAL (TIMER2_COMPA_vect) {
 }
 
 //Alarm Switch
-SIGNAL(SIG_INTERRUPT0) {  
+SIGNAL(INT0_vect) {  
   uint8_t state;
 
   state = (ALARM_PIN & _BV(ALARM));
@@ -825,7 +825,7 @@ SIGNAL(SIG_INTERRUPT0) {
 }
 
 
-SIGNAL(SIG_COMPARATOR) {
+SIGNAL(ANALOG_COMP_vect) {
   //DEBUGP("COMP");
   if (ACSR & _BV(ACO)) {
     //DEBUGP("HIGH");
